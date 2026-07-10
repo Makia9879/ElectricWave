@@ -1,0 +1,21 @@
+# Secrets and local configuration
+.env
+.env.*
+!.env.example
+*.keystore
+*.jks
+key.properties
+
+# Android / Gradle
+.gradle/
+**/build/
+local.properties
+.idea/
+*.iml
+
+# Local server state
+server/data/
+server/tmp/
+
+# Remote TLS state
+deploy/nginx/certbot/
