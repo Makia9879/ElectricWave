@@ -16,6 +16,7 @@ local.properties
 # Local server state
 server/data/
 server/tmp/
+deploy/notice/data/
 
 # Remote TLS state
 deploy/nginx/certbot/
