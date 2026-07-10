@@ -14,7 +14,7 @@
 
 ## 当前进度
 
-截至 2026-07-10，项目已完成架构、MVP 规格、风险调研和部署基础设施准备，尚未开始服务端与 Android 应用实现。
+截至 2026-07-10，服务端与 Android 客户端均已实现并部署上线：公网 webhook → VPS Nginx → 通知服务（认证 SSE）→ Android 前台服务 → 原生系统通知的端到端链路已在真机（HyperOS 3.0 / Android 16）验证通过。
 
 | 范围 | 状态 | 说明 |
 | --- | --- | --- |
@@ -23,11 +23,11 @@
 | Bark Server 复用评估 | 已完成 | 仅可参考 HTTP/存储/部署骨架，不能直接满足 Android SSE 下行模型。 |
 | 本机 Android 环境 | 已完成 | Android SDK 35、JDK 17、Android Studio 和无线 ADB 真机均可用。 |
 | 域名、Nginx、TLS | 已完成 | `notice.example.com` 已启用 Let's Encrypt；HTTP 跳转 HTTPS，自动续期已验证。 |
-| Go 通知服务 | 待实现 | 包括 webhook、接收端白名单、鉴权、SSE、限流、幂等和审计。 |
-| Android App | 待实现 | 包括 profile、Keystore、前台 SSE 服务、重连和原生通知渠道。 |
-| 端到端部署与真机验收 | 待实现 | 服务实现后构建 `linux/amd64` 镜像并部署至 VPS。 |
+| Go 通知服务 | 已完成 | webhook、receiver 白名单/鉴权（hash+常量时间）、SSE（30s 心跳/新连接替换旧连接）、幂等(24h)、TTL、限流、审计、日志脱敏；纯 Go 持久化（modernc SQLite，无 CGO）。 |
+| Android App | 已完成 | profile + Android Keystore 加密存储、default/urgent/foreground 通知渠道、前台 SSE 服务（指数退避/永久错误诊断）、normal→default/high→urgent 渠道映射、收件箱（列表页+详情页）。 |
+| 端到端部署与真机验收 | 已完成 | `linux/amd64` 镜像部署至 VPS（仅回环发布 8788），Nginx 反代 SSE（`proxy_buffering off`），公网真机端到端验证通过。 |
 
-当前访问 `https://notice.example.com/` 返回 `404` 属于预期状态，表示 TLS 入口就绪但通知服务尚未部署。
+通知服务已部署：`https://notice.example.com/healthz` 返回 `200`；根路径返回 `404`（仅暴露既定 API，不泄露默认站点）。
 
 ## 已确定的 MVP 边界
 

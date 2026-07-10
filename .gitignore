@@ -14,6 +14,7 @@ local.properties
 *.iml
 
 # Local server state
+AGENT_HANDOFF.md
 server/data/
 server/tmp/
 deploy/notice/data/
