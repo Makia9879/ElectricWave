@@ -1,0 +1,10 @@
+# Build artifacts (secrets and data/ are ignored at the repo root .gitignore).
+/notice
+/notice-cross
+*.test
+*.out
+*.prof
+
+# Editor
+.idea/
+.vscode/
