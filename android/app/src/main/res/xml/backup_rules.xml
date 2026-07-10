@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<full-backup-content>
+    <!-- Never back up secrets or build state. -->
+    <exclude domain="sharedpref" path="makia_notice_secure.xml" />
+    <exclude domain="sharedpref" path="device.xml" />
+</full-backup-content>
