@@ -25,7 +25,7 @@
 | 域名、Nginx、TLS | 已完成 | `notice.example.com` 已启用 Let's Encrypt；HTTP 跳转 HTTPS，自动续期已验证。 |
 | Go 通知服务 | 已完成 | webhook、receiver 白名单/鉴权（hash+常量时间）、SSE（30s 心跳/新连接替换旧连接）、幂等(24h)、TTL、限流、审计、日志脱敏；纯 Go 持久化（modernc SQLite，无 CGO）。 |
 | Android App | 已完成 | profile + Android Keystore 加密存储、default/urgent/foreground 通知渠道、前台 SSE 服务（指数退避/永久错误诊断）、normal→default/high→urgent 渠道映射、收件箱（列表页+详情页）。 |
-| 端到端部署与真机验收 | 已完成 | `linux/amd64` 镜像部署至 VPS（仅回环发布 8788），Nginx 反代 SSE（`proxy_buffering off`），公网真机端到端验证通过。 |
+| 端到端部署与真机验收 | 已完成 | `linux/amd64` 镜像部署至 VPS（仅回环发布 <port>），Nginx 反代 SSE（`proxy_buffering off`），公网真机端到端验证通过。 |
 
 通知服务已部署：`https://notice.example.com/healthz` 返回 `200`；根路径返回 `404`（仅暴露既定 API，不泄露默认站点）。
 
