@@ -6,6 +6,9 @@
 *.jks
 key.properties
 
+# Local integration doc containing the real webhook token (never commit)
+SENDER_INTEGRATION.md
+
 # Android / Gradle
 .gradle/
 **/build/

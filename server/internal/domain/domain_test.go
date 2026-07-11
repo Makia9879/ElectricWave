@@ -62,8 +62,8 @@ func TestValidateReceiverID(t *testing.T) {
 }
 
 func TestValidateTitleBody(t *testing.T) {
-	long := strings.Repeat("x", 81)
-	big := strings.Repeat("y", 501)
+	long := strings.Repeat("x", 129)
+	big := strings.Repeat("y", 1025)
 	cases := map[string]string{
 		"missing_title": `{"receiver_id":"r","body":"b"}`,
 		"empty_title":   `{"receiver_id":"r","title":"","body":"b"}`,

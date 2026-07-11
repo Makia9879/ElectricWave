@@ -12,8 +12,8 @@ import (
 // Field length limits from the endpoint contract.
 const (
 	MaxReceiverIDRunes    = 256
-	MaxTitleRunes         = 80
-	MaxBodyRunes          = 500
+	MaxTitleRunes         = 128
+	MaxBodyRunes          = 1024
 	MaxIdempotencyKeyRunes = 128
 	MaxGroupKeyRunes      = 64
 	MaxDataBytes          = 4096

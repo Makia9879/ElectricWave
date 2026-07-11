@@ -33,8 +33,8 @@ object NotificationPoster {
     const val EXTRA_NOTIFICATION_DATA = "notification_data"
     const val EXTRA_NOTIFICATION_ID = "notification_id"
 
-    private const val MAX_TITLE = 80
-    private const val MAX_BODY = 500
+    private const val MAX_TITLE = 128
+    private const val MAX_BODY = 1024
 
     fun post(context: Context, event: NotificationEvent, hideSensitiveContent: Boolean) {
         val nm = context.getSystemService<NotificationManager>() ?: return

@@ -52,7 +52,7 @@ func TestNotificationsSchema400(t *testing.T) {
 		"unknown_field":    `{"receiver_id":"phone-main","title":"t","body":"b","extra":1}`,
 		"array_receiver":   `{"receiver_id":["phone-main"],"title":"t","body":"b"}`,
 		"bad_priority":     `{"receiver_id":"phone-main","title":"t","body":"b","priority":"urgent"}`,
-		"title_too_long":   `{"receiver_id":"phone-main","title":"` + strings.Repeat("x", 81) + `","body":"b"}`,
+		"title_too_long":   `{"receiver_id":"phone-main","title":"` + strings.Repeat("x", 129) + `","body":"b"}`,
 		"ttl_out_of_range": `{"receiver_id":"phone-main","title":"t","body":"b","ttl_seconds":10}`,
 		"missing_title":    `{"receiver_id":"phone-main","body":"b"}`,
 		"icon_not_default": `{"receiver_id":"phone-main","title":"t","body":"b","icon":"x"}`,
