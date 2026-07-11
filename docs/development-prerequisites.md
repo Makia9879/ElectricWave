@@ -1,13 +1,13 @@
 # 开发前置条件
 
-更新日期：2026-07-10
+更新日期：2026-07-11
 
 本文件把进入 MVP 实现前的依赖分成“已准备”“我可继续处理”和“需要你完成”。正式规格见[汇总 MVP 规格与实施切片](agents/issues/0008-define-mvp-spec-and-implementation-slices.md)。
 
 ## 已准备
 
 - 已确定个人 MVP 主链路为 `webhook -> 自建服务端 -> HTTP SSE -> Android 前台服务 -> 原生通知`；不依赖小米开发者身份。
-- 应用名称已确定为 `Makia通知器`，Android 包名固定为 `com.makia98.notice`。
+- 应用名称已确定为 `ElectricWave`，Android 包名固定为 `com.makia98.electricwave`。
 - 已固定 webhook 与接收端协议、安全边界、Android 配置模型和验收矩阵。
 - 已定义未来服务端所需的环境变量边界，暂不创建服务端配置文件或实现。
 - 已创建根目录 `.gitignore`，阻止 `.env`、Android 签名文件、Gradle 构建产物和本地服务端数据被提交。
@@ -17,6 +17,8 @@
 - 已完成一台真机的无线 ADB 配对：设备型号 `2509FPN0BC`（`popsicle`）、Android `16`、HyperOS `3.0`。后续 MVP 验收以该设备为首个基线。
 - 已确定远程部署主机为 `mk@cloud.makia98.com`（SSH：`ssh mk@cloud.makia98.com -p5022`），使用 Docker 部署；本地构建镜像可导出为 tar 后上传并在远程导入运行。已验证远程环境为 `linux/amd64`、Docker `26.1.4`，且已有 host-network Nginx 容器。
 - `notice.makia98.com` 已配置为 Cloudflare DNS only A 记录，指向 `47.119.174.236`；VPS Nginx 已签发并启用 Let's Encrypt 证书，HTTP 跳转 HTTPS 已验证。
+- 2026-07-11 复核：`ssh mk@cloud.makia98.com -p5022` 可连接；远程历史运维名 `notice` 容器运行 `electricwave-server:latest`，仅发布 `127.0.0.1:8788->8788/tcp`，状态 healthy；`notice` 此处不是产品名；`https://notice.makia98.com/healthz` 返回 HTTP 200。
+- 2026-07-11 复核：本地无线 ADB 可见 `2509FPN0BC`；使用可写临时缓存后服务端 `go test ./...` 通过，Android `./gradlew testDebugUnitTest` 构建成功但无实际单测。
 - Certbot 自动续期已配置为远程用户每日 `03:17` 执行；续期成功时自动 reload Nginx。证书当前有效至 `2026-10-08`，`renew --dry-run` 已通过。
 
 ## 本机缺口
@@ -29,6 +31,27 @@
 | Android 真机 | 已完成一台 HyperOS 真机的无线 ADB 配对 | 首个基线设备已可用；后续仍应增加至少一台非 HyperOS 或不同 Android 版本设备。 |
 
 Android SDK 与 JDK 17 均已准备完成。默认 shell 的 JDK 20 不应用于 Android 构建。
+
+在 Codex/沙箱环境中验证时，不要使用默认的 `$HOME` 缓存路径；使用 `/private/tmp` 下的可写缓存：
+
+```sh
+mkdir -p /private/tmp/electricwave-gomodcache \
+  /private/tmp/electricwave-gocache \
+  /private/tmp/electricwave-gopath
+cd server
+GOMODCACHE=/private/tmp/electricwave-gomodcache \
+GOCACHE=/private/tmp/electricwave-gocache \
+GOPATH=/private/tmp/electricwave-gopath \
+go test ./...
+
+cd ..
+mkdir -p /private/tmp/electricwave-gradle
+source scripts/android-env.sh
+cd android
+GRADLE_USER_HOME=/private/tmp/electricwave-gradle ./gradlew testDebugUnitTest
+```
+
+Android 构建可能尝试写 `/Users/makia/.android/analytics.settings` 或 Kotlin daemon marker；在沙箱中会降级或警告。只要最终 `BUILD SUCCESSFUL`，可作为编译链路通过；但 `testDebugUnitTest NO-SOURCE` 不能当作 Android 行为测试通过。
 
 ## 后续条件
 

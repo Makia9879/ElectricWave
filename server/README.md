@@ -1,4 +1,4 @@
-# Makia 通知器 - Go 服务端
+# ElectricWave - Go 服务端
 
 个人自托管的 Android 通知 MVP 服务端。外部系统通过 HTTPS webhook 创建通知，服务端鉴权、校验后经认证 HTTP SSE 下发给 Android 前台服务。本目录是纯 Go 模块（无 CGO，可静态编译为 `linux/amd64`）。
 
@@ -10,7 +10,7 @@
 
 ```
 server/
-  cmd/notice/main.go         程序入口：加载配置、seed bootstrap、启动 HTTP、TTL 清理、优雅关闭
+  cmd/electricwave/main.go   程序入口：加载配置、seed bootstrap、启动 HTTP、TTL 清理、优雅关闭
   internal/
     config/                  .env + 环境变量加载与校验（自定义加载器，无额外依赖）
     logging/                 slog 结构化日志 + 脱敏辅助
@@ -30,7 +30,7 @@ server/
 | 方法 | 路径 | 鉴权 | 说明 |
 | --- | --- | --- | --- |
 | GET | `/healthz` | 无 | 健康检查，返回 `{"status":"ok"}`，不泄露配置。 |
-| POST | `/api/v1/notifications` | webhook token | 创建并投递通知。在线→201；离线→503。 |
+| POST | `/api/v1/notifications` | webhook token | 创建并投递通知。在线→201；离线→202 queued。 |
 | GET | `/api/v1/receivers/{receiver_id}/stream` | receiver identity token | SSE 流，每 30s 心跳，新连接替换旧连接。 |
 | POST | `/api/v1/receivers/{receiver_id}/test` | receiver identity token | 在线时投递一条测试通知。 |
 
@@ -40,7 +40,7 @@ server/
 
 - **凭据只存 hash**：webhook token 与 receiver identity token 以 SHA-256（可选 HMAC-SHA256 + pepper）hex 落库，比较用 `crypto/subtle` 常量时间。原始 token 永不下发、不入日志、不入审计。
 - **幂等**：作用域 `webhook_token_id + receiver_id + idempotency_key`，保留 24 小时。核心内容 hash = SHA-256 of 稳定 JSON `{title, body, priority, group_key, data}`（不含 ttl/idempotency_key/receiver_id）。同键同内容→200 duplicate；同键不同内容→409。查插在单连接事务内完成，并发重复请求不会重复创建或重复下发。
-- **离线语义**：receiver 无 SSE 连接时 webhook 返回 `503 delivery_unavailable`，不伪造送达、不持久排队。已持久化的重复请求即便当前离线也返回 200 duplicate。
+- **离线语义**：receiver 无 SSE 连接时 webhook 返回 `202 queued`，进入短期、有界 backlog。客户端重连后按 `Last-Event-ID` / `X-Receiver-Ack` 补发并清理；ack 只表示 App 已收到并持久化，不承诺系统通知已展示。
 - **限流**：按 webhook token、来源 IP、receiver_id 三维度 token bucket（内存），命中返回 429 + `Retry-After`。
 - **SSE hub**：每个 receiver 至多一条连接；新连接取消旧连接 context。心跳为 SSE 注释 `: heartbeat\n\n`，立即 flush。
 - **审计**：每请求记录 request_id、token_id、receiver_id、provider、状态码、错误分类、耗时，落库 `audit` 表。
@@ -55,7 +55,7 @@ cd server
 go build ./...
 
 # 静态交叉编译（与 Dockerfile 一致，VPS 适配）
-CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o notice ./cmd/notice
+CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o electricwave ./cmd/electricwave
 
 # 静态检查与全量测试（含竞态）
 go vet ./...
@@ -73,7 +73,7 @@ cp .env.example .env
 # 编辑 .env，至少填入：
 #   BOOTSTRAP_WEBHOOK_ACCESS_TOKEN=$(openssl rand -hex 32)
 #   BOOTSTRAP_RECEIVER_IDENTITY_TOKEN=$(openssl rand -hex 32)
-go run ./cmd/notice
+go run ./cmd/electricwave
 ```
 
 服务监听 `:8788`（默认）。生产部署：容器仅发布 `127.0.0.1:8788:8788`，由宿主机 Nginx 反代并终止 TLS；公网只开放 80/443。
@@ -85,13 +85,13 @@ go run ./cmd/notice
 ## Docker
 
 ```sh
-docker buildx build --platform linux/amd64 -t makia-notice:latest -f Dockerfile .
+docker buildx build --platform linux/amd64 -t electricwave-server:latest -f Dockerfile .
 # 运行（token 通过环境变量注入，不挂载 .env 文件）
 docker run --rm -p 127.0.0.1:8788:8788 \
   -e BOOTSTRAP_WEBHOOK_ACCESS_TOKEN=... \
   -e BOOTSTRAP_RECEIVER_IDENTITY_TOKEN=... \
-  -v notice-data:/data \
-  makia-notice:latest
+  -v electricwave-data:/data \
+  electricwave-server:latest
 ```
 
 镜像基于 alpine，含 `ca-certificates`，`HEALTHCHECK` 用 `wget` 探测 `/healthz`，以非 root 用户 `app` 运行。
