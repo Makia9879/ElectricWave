@@ -22,6 +22,7 @@ const (
 	CodeRateLimited          = "rate_limited"
 	CodeInternalError        = "internal_error"
 	CodeDeliveryUnavailable  = "delivery_unavailable"
+	CodeBacklogFull          = "backlog_full"
 	CodeUnsupportedMediaType = "unsupported_media_type"
 	CodeMethodNotAllowed     = "method_not_allowed"
 )
@@ -36,6 +37,7 @@ var statusByCode = map[string]int{
 	CodeRateLimited:          http.StatusTooManyRequests,
 	CodeInternalError:        http.StatusInternalServerError,
 	CodeDeliveryUnavailable:  http.StatusServiceUnavailable,
+	CodeBacklogFull:          http.StatusTooManyRequests,
 	CodeUnsupportedMediaType: http.StatusUnsupportedMediaType,
 	CodeMethodNotAllowed:     http.StatusMethodNotAllowed,
 }

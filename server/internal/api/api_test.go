@@ -14,10 +14,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/makia9879/makia-notice/internal/auth"
-	"github.com/makia9879/makia-notice/internal/config"
-	"github.com/makia9879/makia-notice/internal/hub"
-	"github.com/makia9879/makia-notice/internal/store"
+	"github.com/makia9879/electricwave/internal/auth"
+	"github.com/makia9879/electricwave/internal/config"
+	"github.com/makia9879/electricwave/internal/hub"
+	"github.com/makia9879/electricwave/internal/store"
 )
 
 // lockedBuffer is a concurrency-safe bytes.Buffer so the test can read log
@@ -40,16 +40,17 @@ func (b *lockedBuffer) String() string {
 }
 
 const (
-	testWebhookTok   = "test-webhook-secret-0123456789abcdefABCDEF"
-	testIdentityTok  = "test-identity-secret-987654321fedcbaFEDCBA"
-	testReceiver     = "phone-main"
-	bodyCanary       = "DISTINCT_BODY_CANARY_订单已支付_123"
+	testWebhookTok  = "test-webhook-secret-0123456789abcdefABCDEF"
+	testIdentityTok = "test-identity-secret-987654321fedcbaFEDCBA"
+	testReceiver    = "phone-main"
+	bodyCanary      = "DISTINCT_BODY_CANARY_订单已支付_123"
 )
 
 type sseFrame struct {
 	event   string
 	data    string
 	comment string
+	id      string
 }
 
 // newTestApp builds an App backed by a temp SQLite DB and a captured log
@@ -75,16 +76,17 @@ func newTestApp(t *testing.T, heartbeat time.Duration) (*App, *lockedBuffer, *st
 	var logBuf lockedBuffer
 	log := slog.New(slog.NewJSONHandler(&logBuf, &slog.HandlerOptions{Level: slog.LevelDebug}))
 	cfg := &config.Config{
-		HTTPAddr:                 ":0",
-		PublicBaseURL:            "https://notice.example",
-		DeliveryProvider:         "self_hosted_sse",
-		SSEHeartbeatInterval:     heartbeat,
-		TrustedProxyAddrs:        map[string]struct{}{"127.0.0.1": {}, "::1": {}},
-		StoragePath:              filepath.Join(dir, "notice.db"),
-		TokenHashPepper:          "",
-		RatePerTokenPerMin:       100000,
-		RatePerIPPerMin:          100000,
-		RatePerReceiverPerMin:    100000,
+		HTTPAddr:              ":0",
+		PublicBaseURL:         "https://notice.example",
+		DeliveryProvider:      "self_hosted_sse",
+		SSEHeartbeatInterval:  heartbeat,
+		TrustedProxyAddrs:     map[string]struct{}{"127.0.0.1": {}, "::1": {}},
+		StoragePath:           filepath.Join(dir, "notice.db"),
+		TokenHashPepper:       "",
+		RatePerTokenPerMin:    100000,
+		RatePerIPPerMin:       100000,
+		RatePerReceiverPerMin: 100000,
+		BacklogMaxPerReceiver: 1000,
 	}
 	h := hub.New()
 	app, err := New(cfg, log, st, h)
@@ -143,10 +145,20 @@ func readBody(t *testing.T, resp *http.Response) string {
 // a close function.
 func openStream(t *testing.T, srv *httptest.Server, receiverID, token string) (<-chan sseFrame, func()) {
 	t.Helper()
+	return openStreamWithHeaders(t, srv, receiverID, token, nil)
+}
+
+// openStreamWithHeaders is like openStream but allows extra request headers
+// (e.g., Last-Event-ID, X-Receiver-Ack).
+func openStreamWithHeaders(t *testing.T, srv *httptest.Server, receiverID, token string, headers map[string]string) (<-chan sseFrame, func()) {
+	t.Helper()
 	req, _ := http.NewRequest(http.MethodGet, srv.URL+"/api/v1/receivers/"+receiverID+"/stream", nil)
 	req.Header.Set("Accept", "text/event-stream")
 	if token != "" {
 		req.Header.Set("Authorization", "Bearer "+token)
+	}
+	for k, v := range headers {
+		req.Header.Set(k, v)
 	}
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
@@ -160,7 +172,7 @@ func openStream(t *testing.T, srv *httptest.Server, receiverID, token string) (<
 func readSSE(body io.ReadCloser, out chan<- sseFrame) {
 	defer close(out)
 	br := bufio.NewReader(body)
-	var event, data string
+	var event, data, id string
 	for {
 		line, err := br.ReadString('\n')
 		if len(line) > 0 {
@@ -175,14 +187,16 @@ func readSSE(body io.ReadCloser, out chan<- sseFrame) {
 				event = strings.TrimPrefix(line, "event: ")
 			case strings.HasPrefix(line, "data: "):
 				data = strings.TrimPrefix(line, "data: ")
+			case strings.HasPrefix(line, "id: "):
+				id = strings.TrimPrefix(line, "id: ")
 			case line == "":
 				if event != "" || data != "" {
 					select {
-					case out <- sseFrame{event: event, data: data}:
+					case out <- sseFrame{event: event, data: data, id: id}:
 					case <-time.After(2 * time.Second):
 					}
 				}
-				event, data = "", ""
+				event, data, id = "", "", ""
 			}
 		}
 		if err != nil {
@@ -195,6 +209,44 @@ func expectStatus(t *testing.T, resp *http.Response, want int) {
 	t.Helper()
 	if resp.StatusCode != want {
 		t.Fatalf("status: got %d, want %d; body=%s", resp.StatusCode, want, readBody(t, resp))
+	}
+}
+
+// nextNotificationFrame reads frames until a notification event arrives or the
+// deadline passes, skipping info / heartbeat control events.
+func nextNotificationFrame(t *testing.T, frames <-chan sseFrame) sseFrame {
+	t.Helper()
+	deadline := 2 * time.Second
+	for start := time.Now(); time.Since(start) < deadline; {
+		select {
+		case f, ok := <-frames:
+			if !ok {
+				t.Fatal("stream closed before notification event")
+			}
+			if f.event == "notification" {
+				return f
+			}
+		case <-time.After(deadline):
+			t.Fatal("did not receive notification event")
+		}
+	}
+	t.Fatal("did not receive notification event")
+	return sseFrame{}
+}
+
+// nextFrame reads the next frame of any type (info, backlog_gap, notification,
+// heartbeat comment) or fails after the deadline.
+func nextFrame(t *testing.T, frames <-chan sseFrame) sseFrame {
+	t.Helper()
+	select {
+	case f, ok := <-frames:
+		if !ok {
+			t.Fatal("stream closed")
+		}
+		return f
+	case <-time.After(2 * time.Second):
+		t.Fatal("no frame received within deadline")
+		return sseFrame{}
 	}
 }
 

@@ -1,4 +1,4 @@
-module github.com/makia9879/makia-notice
+module github.com/makia9879/electricwave
 
 go 1.25.0
 

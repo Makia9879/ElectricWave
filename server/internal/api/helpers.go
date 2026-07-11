@@ -5,7 +5,7 @@ import (
 	"errors"
 	"strconv"
 
-	"github.com/makia9879/makia-notice/internal/store"
+	"github.com/makia9879/electricwave/internal/store"
 )
 
 func newBytesReader(b []byte) *bytes.Reader { return bytes.NewReader(b) }

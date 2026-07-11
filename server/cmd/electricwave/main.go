@@ -1,4 +1,4 @@
-// Command notice runs the Makia notification HTTP service.
+// Command electricwave runs the ElectricWave notification HTTP service.
 package main
 
 import (
@@ -11,12 +11,12 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/makia9879/makia-notice/internal/api"
-	"github.com/makia9879/makia-notice/internal/auth"
-	"github.com/makia9879/makia-notice/internal/config"
-	"github.com/makia9879/makia-notice/internal/hub"
-	"github.com/makia9879/makia-notice/internal/logging"
-	"github.com/makia9879/makia-notice/internal/store"
+	"github.com/makia9879/electricwave/internal/api"
+	"github.com/makia9879/electricwave/internal/auth"
+	"github.com/makia9879/electricwave/internal/config"
+	"github.com/makia9879/electricwave/internal/hub"
+	"github.com/makia9879/electricwave/internal/logging"
+	"github.com/makia9879/electricwave/internal/store"
 )
 
 func main() {
@@ -106,8 +106,9 @@ func run() error {
 	return nil
 }
 
-// startTTLSweeper periodically marks expired, undelivered notifications as
-// dropped. It returns a stop function.
+// startTTLSweeper periodically transitions expired notifications to the
+// expired state and deletes acked rows older than 24 hours (§6). It returns a
+// stop function.
 func startTTLSweeper(ctx context.Context, st *store.Store, log *slog.Logger) func() {
 	ticker := time.NewTicker(10 * time.Minute)
 	done := make(chan struct{})
@@ -119,10 +120,17 @@ func startTTLSweeper(ctx context.Context, st *store.Store, log *slog.Logger) fun
 			case <-done:
 				return
 			case <-ticker.C:
-				if n, err := st.SweepExpired(ctx, time.Now()); err != nil {
+				now := time.Now()
+				if n, err := st.SweepExpired(ctx, now); err != nil {
 					log.Warn("ttl sweep failed", "err", err.Error())
 				} else if n > 0 {
-					log.Info("ttl sweep", "dropped", n)
+					log.Info("ttl sweep", "expired", n)
+				}
+				cutoff := now.Add(-24 * time.Hour)
+				if n, err := st.DeleteAckedOlder(ctx, cutoff); err != nil {
+					log.Warn("acked retention sweep failed", "err", err.Error())
+				} else if n > 0 {
+					log.Info("acked retention sweep", "deleted", n)
 				}
 			}
 		}

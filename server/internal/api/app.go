@@ -9,12 +9,12 @@ import (
 	"strings"
 	"time"
 
-	"github.com/makia9879/makia-notice/internal/auth"
-	"github.com/makia9879/makia-notice/internal/config"
-	"github.com/makia9879/makia-notice/internal/hub"
-	"github.com/makia9879/makia-notice/internal/idgen"
-	"github.com/makia9879/makia-notice/internal/ratelimit"
-	"github.com/makia9879/makia-notice/internal/store"
+	"github.com/makia9879/electricwave/internal/auth"
+	"github.com/makia9879/electricwave/internal/config"
+	"github.com/makia9879/electricwave/internal/hub"
+	"github.com/makia9879/electricwave/internal/idgen"
+	"github.com/makia9879/electricwave/internal/ratelimit"
+	"github.com/makia9879/electricwave/internal/store"
 )
 
 // idempotencyWindow is the retention window for duplicate detection.

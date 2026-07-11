@@ -10,7 +10,7 @@ COPY go.mod go.sum ./
 RUN go mod download
 COPY . .
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
-    go build -trimpath -ldflags="-s -w" -o /out/notice ./cmd/notice
+    go build -trimpath -ldflags="-s -w" -o /out/electricwave ./cmd/electricwave
 
 # ---- runtime stage ----
 FROM alpine:3.20
@@ -19,10 +19,10 @@ RUN apk add --no-cache ca-certificates wget && \
     addgroup -S app && adduser -S app -G app && \
     mkdir -p /data && chown -R app:app /data
 
-COPY --from=build /out/notice /usr/local/bin/notice
+COPY --from=build /out/electricwave /usr/local/bin/electricwave
 
 # Persist SQLite data under /data. Override with STORAGE_PATH if needed.
-ENV STORAGE_PATH=/data/notice.db \
+ENV STORAGE_PATH=/data/electricwave.db \
     HTTP_ADDR=:8788
 
 USER app
@@ -33,4 +33,4 @@ EXPOSE 8788
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
     CMD wget -qO- http://127.0.0.1:8788/healthz || exit 1
 
-ENTRYPOINT ["notice"]
+ENTRYPOINT ["electricwave"]

@@ -6,18 +6,42 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/makia9879/makia-notice/internal/domain"
-	"github.com/makia9879/makia-notice/internal/idgen"
-	"github.com/makia9879/makia-notice/internal/store"
+	"github.com/makia9879/electricwave/internal/domain"
+	"github.com/makia9879/electricwave/internal/idgen"
+	"github.com/makia9879/electricwave/internal/store"
 )
 
 // maxBodyBytes is the overall request body cap (8 KiB). We read one extra byte
 // so an over-limit body can be detected unambiguously.
 const maxBodyBytes = domain.MaxBodyBytes
 
-type acceptedResponse struct {
+// backlogFullRetryAfter is the fixed Retry-After (seconds) returned with a 429
+// backlog_full response. It gives the client a hint to wait for acks/expiry to
+// free capacity.
+const backlogFullRetryAfter = 60
+
+type duplicateResponse struct {
 	NotificationID string `json:"notification_id"`
 	Status         string `json:"status"`
+}
+
+type createdResponse struct {
+	NotificationID string `json:"notification_id"`
+	Status         string `json:"status"`
+	EventID        int64  `json:"event_id"`
+	ExpiresAt      string `json:"expires_at"`
+}
+
+type backlogCountBody struct {
+	Count int `json:"count"`
+}
+
+type queuedResponse struct {
+	NotificationID string           `json:"notification_id"`
+	Status         string           `json:"status"`
+	EventID        int64            `json:"event_id"`
+	ExpiresAt      string           `json:"expires_at"`
+	Backlog        backlogCountBody `json:"backlog"`
 }
 
 // handleNotifications implements POST /api/v1/notifications.
@@ -126,22 +150,18 @@ func (a *App) handleNotifications(w http.ResponseWriter, r *http.Request) {
 		a.writeError(w, r, errInternal())
 		return
 	} else if outcome == store.OutcomeDuplicate {
-		a.respond(w, r, http.StatusOK, acceptedResponse{NotificationID: id, Status: "duplicate"})
+		a.respond(w, r, http.StatusOK, duplicateResponse{NotificationID: id, Status: "duplicate"})
 		return
 	} else if outcome == store.OutcomeConflict {
 		a.writeError(w, r, errf(CodeIdempotencyConflict, "idempotency key conflicts with existing content"))
 		return
 	}
 
-	// 11. Delivery: only to an online SSE connection.
-	if !a.hub.IsOnline(vn.ReceiverID) {
-		a.writeError(w, r, errf(CodeDeliveryUnavailable, "receiver is offline"))
-		return
-	}
-
-	// 12. Persist (transactional idempotency re-check) then deliver.
+	// 11. Persist (transactional idempotency re-check, capacity guard, event_id
+	// allocation). No row is created when the receiver backlog is full (§5, §6).
 	notifID := idgen.NotificationID()
 	now := time.Now()
+	expiresAt := now.Add(time.Duration(vn.TTLSeconds) * time.Second)
 	n := store.Notification{
 		NotificationID: notifID,
 		TokenID:        tok.TokenID,
@@ -154,11 +174,11 @@ func (a *App) handleNotifications(w http.ResponseWriter, r *http.Request) {
 		GroupKey:       vn.GroupKey,
 		DataJSON:       string(vn.DataJSON),
 		TTLSeconds:     vn.TTLSeconds,
-		ExpiresAt:      now.Add(time.Duration(vn.TTLSeconds) * time.Second),
+		ExpiresAt:      expiresAt,
 		Status:         "accepted",
 		CreatedAt:      now,
 	}
-	outcome, storedID, err := a.store.CreateNotification(r.Context(), n, idempotencyWindow)
+	outcome, storedID, eventID, err := a.store.CreateNotification(r.Context(), n, idempotencyWindow, a.cfg.BacklogMaxPerReceiver)
 	if err != nil {
 		a.log.Error("create notification failed", "request_id", auditFrom(r).requestID, "err", err.Error())
 		a.writeError(w, r, errInternal())
@@ -166,19 +186,48 @@ func (a *App) handleNotifications(w http.ResponseWriter, r *http.Request) {
 	}
 	switch outcome {
 	case store.OutcomeDuplicate:
-		a.respond(w, r, http.StatusOK, acceptedResponse{NotificationID: storedID, Status: "duplicate"})
+		a.respond(w, r, http.StatusOK, duplicateResponse{NotificationID: storedID, Status: "duplicate"})
 		return
 	case store.OutcomeConflict:
 		a.writeError(w, r, errf(CodeIdempotencyConflict, "idempotency key conflicts with existing content"))
 		return
+	case store.OutcomeBacklogFull:
+		w.Header().Set("Retry-After", itoa(backlogFullRetryAfter))
+		a.writeError(w, r, errf(CodeBacklogFull, "receiver backlog is full"))
+		return
 	}
 
-	// Build and deliver the SSE event.
-	payload := formatNotificationEvent(notifID, vn.Title, vn.Body, vn.Priority, vn.GroupKey, vn.DataJSON, time.Duration(vn.TTLSeconds)*time.Second)
-	if !a.hub.Send(vn.ReceiverID, payload) {
-		// The connection went away between the online check and delivery. The
-		// notification was already accepted (201); we do not fabricate delivery.
-		a.log.Warn("delivery dropped after accept", "request_id", auditFrom(r).requestID, "notification_id", notifID)
+	// 12. Attempt real-time delivery. When the receiver is online and hub.Send
+	// queues the event, mark sent and return 201. Otherwise mark queued and
+	// return 202 (§5).
+	if a.hub.IsOnline(vn.ReceiverID) {
+		payload := formatNotificationEvent(eventID, notifID, vn.Title, vn.Body, vn.Priority, vn.GroupKey, vn.DataJSON, expiresAt)
+		if a.hub.Send(vn.ReceiverID, payload) {
+			if err := a.store.MarkSent(r.Context(), notifID); err != nil {
+				a.log.Warn("mark sent failed", "notification_id", notifID, "err", err.Error())
+			}
+			a.respond(w, r, http.StatusCreated, createdResponse{
+				NotificationID: notifID,
+				Status:         "accepted",
+				EventID:        eventID,
+				ExpiresAt:      expiresAt.UTC().Format(time.RFC3339),
+			})
+			return
+		}
+		a.log.Warn("delivery failed after accept, queuing",
+			"notification_id", notifID, "receiver_id", vn.ReceiverID, "event_id", eventID)
 	}
-	a.respond(w, r, http.StatusCreated, acceptedResponse{NotificationID: notifID, Status: "accepted"})
+
+	// Receiver offline or hub.Send did not deliver → queue for replay.
+	if err := a.store.MarkQueued(r.Context(), notifID); err != nil {
+		a.log.Warn("mark queued failed", "notification_id", notifID, "err", err.Error())
+	}
+	count, _ := a.store.BacklogCount(r.Context(), vn.ReceiverID, time.Now())
+	a.respond(w, r, http.StatusAccepted, queuedResponse{
+		NotificationID: notifID,
+		Status:         "queued",
+		EventID:        eventID,
+		ExpiresAt:      expiresAt.UTC().Format(time.RFC3339),
+		Backlog:        backlogCountBody{Count: count},
+	})
 }

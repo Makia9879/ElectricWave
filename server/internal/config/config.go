@@ -14,24 +14,26 @@ import (
 
 // Config holds all runtime settings.
 type Config struct {
-	HTTPAddr                    string
-	PublicBaseURL               string
-	DeliveryProvider            string
-	SSEHeartbeatInterval        time.Duration
-	TrustedProxyAddrs           map[string]struct{}
+	HTTPAddr             string
+	PublicBaseURL        string
+	DeliveryProvider     string
+	SSEHeartbeatInterval time.Duration
+	TrustedProxyAddrs    map[string]struct{}
 
-	BootstrapWebhookAccessToken      string
-	BootstrapReceiverID              string
-	BootstrapReceiverIdentityToken   string
-	BootstrapReceiverEnabled         bool
-	BootstrapReceiverAllowlisted     bool
+	BootstrapWebhookAccessToken    string
+	BootstrapReceiverID            string
+	BootstrapReceiverIdentityToken string
+	BootstrapReceiverEnabled       bool
+	BootstrapReceiverAllowlisted   bool
 
-	StoragePath string
+	StoragePath     string
 	TokenHashPepper string
 
-	RatePerTokenPerMin     int
-	RatePerIPPerMin        int
-	RatePerReceiverPerMin  int
+	RatePerTokenPerMin    int
+	RatePerIPPerMin       int
+	RatePerReceiverPerMin int
+
+	BacklogMaxPerReceiver int
 }
 
 // Load reads the optional .env file at path (ignoring "file not found") and
@@ -46,24 +48,33 @@ func Load(path string) (*Config, error) {
 	}
 
 	cfg := &Config{
-		HTTPAddr:                 getEnv("HTTP_ADDR", ":8788"),
-		PublicBaseURL:            getEnv("PUBLIC_BASE_URL", "https://notice.makia98.com"),
-		DeliveryProvider:         getEnv("DELIVERY_PROVIDER", "self_hosted_sse"),
-		SSEHeartbeatInterval:     time.Duration(getEnvInt("SSE_HEARTBEAT_INTERVAL_SECONDS", 30)) * time.Second,
-		BootstrapReceiverID:      getEnv("BOOTSTRAP_RECEIVER_ID", "phone-main"),
-		BootstrapReceiverEnabled: getEnvBool("BOOTSTRAP_RECEIVER_ENABLED", true),
+		HTTPAddr:                     getEnv("HTTP_ADDR", ":8788"),
+		PublicBaseURL:                getEnv("PUBLIC_BASE_URL", "https://notice.makia98.com"),
+		DeliveryProvider:             getEnv("DELIVERY_PROVIDER", "self_hosted_sse"),
+		SSEHeartbeatInterval:         time.Duration(getEnvInt("SSE_HEARTBEAT_INTERVAL_SECONDS", 30)) * time.Second,
+		BootstrapReceiverID:          getEnv("BOOTSTRAP_RECEIVER_ID", "phone-main"),
+		BootstrapReceiverEnabled:     getEnvBool("BOOTSTRAP_RECEIVER_ENABLED", true),
 		BootstrapReceiverAllowlisted: getEnvBool("BOOTSTRAP_RECEIVER_ALLOWLISTED", true),
-		StoragePath:              getEnv("STORAGE_PATH", "./data/notice.db"),
-		TokenHashPepper:          os.Getenv("TOKEN_HASH_PEPPER"),
-		RatePerTokenPerMin:       getEnvInt("RATE_LIMIT_PER_TOKEN_PER_MIN", 60),
-		RatePerIPPerMin:          getEnvInt("RATE_LIMIT_PER_IP_PER_MIN", 120),
-		RatePerReceiverPerMin:    getEnvInt("RATE_LIMIT_PER_RECEIVER_PER_MIN", 60),
+		StoragePath:                  getEnv("STORAGE_PATH", "./data/electricwave.db"),
+		TokenHashPepper:              os.Getenv("TOKEN_HASH_PEPPER"),
+		RatePerTokenPerMin:           getEnvInt("RATE_LIMIT_PER_TOKEN_PER_MIN", 60),
+		RatePerIPPerMin:              getEnvInt("RATE_LIMIT_PER_IP_PER_MIN", 120),
+		RatePerReceiverPerMin:        getEnvInt("RATE_LIMIT_PER_RECEIVER_PER_MIN", 60),
+		BacklogMaxPerReceiver:        getEnvInt("BACKLOG_MAX_PER_RECEIVER", 1000),
 	}
 	cfg.TrustedProxyAddrs = parseSet(getEnv("TRUSTED_PROXY_ADDRS", "127.0.0.1,::1"))
 
 	// Normalize a zero heartbeat to the spec default.
 	if cfg.SSEHeartbeatInterval <= 0 {
 		cfg.SSEHeartbeatInterval = 30 * time.Second
+	}
+
+	// Clamp the per-receiver backlog cap into [100, 10000] (§6).
+	if cfg.BacklogMaxPerReceiver < 100 {
+		cfg.BacklogMaxPerReceiver = 100
+	}
+	if cfg.BacklogMaxPerReceiver > 10000 {
+		cfg.BacklogMaxPerReceiver = 10000
 	}
 
 	cfg.BootstrapWebhookAccessToken = os.Getenv("BOOTSTRAP_WEBHOOK_ACCESS_TOKEN")
