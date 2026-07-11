@@ -146,10 +146,11 @@ class NoticeForegroundService : Service() {
                 startStream(profile)
             }
         }
-        // If the process is killed, do not auto-restart the service; the user
-        // must re-enable receiving. (Android may still restart a sticky service
-        // on some ROMs, which is best-effort.)
-        return START_NOT_STICKY
+        // Preserve the user's enabled receiving state across ordinary process
+        // reclaim. Android restarts a sticky service with a null intent, which
+        // is handled above by loading the persisted profile and starting SSE.
+        // This does not override a user-initiated ACTION_STOP or force-stop.
+        return START_STICKY
     }
 
     private fun startStream(profile: Profile) {
