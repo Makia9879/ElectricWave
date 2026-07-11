@@ -1,15 +1,15 @@
 <resources>
-    <string name="app_name">Makia通知器</string>
+    <string name="app_name">ElectricWave</string>
 
     <!-- Channels -->
     <string name="channel_default_name">普通通知</string>
-    <string name="channel_default_desc">Makia通知器的普通通知</string>
+    <string name="channel_default_desc">ElectricWave的普通通知</string>
     <string name="channel_urgent_name">高优先级通知</string>
     <string name="channel_urgent_desc">需要立即关注的高优先级通知</string>
     <string name="channel_foreground_name">接收服务</string>
     <string name="channel_foreground_desc">前台接收服务运行状态</string>
 
     <!-- Foreground service notification -->
-    <string name="foreground_notif_title">Makia通知器正在接收通知</string>
+    <string name="foreground_notif_title">ElectricWave正在接收通知</string>
     <string name="foreground_notif_text">保持连接以接收推送</string>
 </resources>

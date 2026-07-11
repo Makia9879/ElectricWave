@@ -27,5 +27,5 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "MakiaNotice"
+rootProject.name = "ElectricWave"
 include(":app")

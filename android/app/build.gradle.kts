@@ -4,11 +4,11 @@ plugins {
 }
 
 android {
-    namespace = "com.makia98.notice"
+    namespace = "com.makia98.electricwave"
     compileSdk = 35
 
     defaultConfig {
-        applicationId = "com.makia98.notice"
+        applicationId = "com.makia98.electricwave"
         minSdk = 26
         targetSdk = 35
         versionCode = 1
@@ -60,6 +60,8 @@ dependencies {
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.8.4")
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.8.4")
     implementation("androidx.lifecycle:lifecycle-runtime-compose:2.8.4")
+    // ProcessLifecycleOwner: app-foreground reconnect trigger (contract §10.2).
+    implementation("androidx.lifecycle:lifecycle-process:2.8.4")
 
     implementation("androidx.compose.ui:ui")
     implementation("androidx.compose.ui:ui-graphics")
@@ -78,4 +80,7 @@ dependencies {
 
     // Coroutines.
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1")
+
+    // Unit testing (pure JVM).
+    testImplementation("junit:junit:4.13.2")
 }
