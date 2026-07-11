@@ -17,7 +17,7 @@ local.properties
 AGENT_HANDOFF.md
 server/data/
 server/tmp/
-deploy/notice/data/
+deploy/electricwave/data/
 
 # Remote TLS state
 deploy/nginx/certbot/
