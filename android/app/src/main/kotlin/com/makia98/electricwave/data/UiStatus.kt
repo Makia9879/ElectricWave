@@ -8,7 +8,7 @@ package com.makia98.electricwave.data
 enum class UiStatus {
     /** SSE CONNECTED. Main button: none / view details. */
     RECEIVING,
-    /** CONNECTING or BACKOFF, no backlog. Main button: 立即重连. */
+    /** CONNECTING or BACKOFF. Main button: 立即重连. */
     RECONNECTING,
     /** Received backlog_gap or info.backlog_count > 0. Main button: 重连并补发. */
     BACKLOG_PENDING,
@@ -47,9 +47,12 @@ data class DiagnosticFlags(
  *  3. NEEDS_AUTHORIZATION — notification display path blocked by user/system
  *     settings. Surfaced above reception because even a live connection cannot
  *     produce a visible notification in this state.
- *  4. BACKLOG_PENDING — known undelivered backlog; actionable "重连并补发".
- *  5. RECEIVING — CONNECTED with nothing pending.
- *  6. RECONNECTING — anything else (CONNECTING / BACKOFF / DISCONNECTED).
+ *  4. RECONNECTING — an automatic connection attempt is already active
+ *     (CONNECTING / BACKOFF); stale backlog metadata must not offer another
+ *     "重连并补发" action while that attempt is running.
+ *  5. BACKLOG_PENDING — known undelivered backlog while not actively reconnecting.
+ *  6. RECEIVING — CONNECTED with nothing pending.
+ *  7. RECONNECTING — any remaining disconnected/disabled runtime state.
  */
 object UiStatusResolver {
 
@@ -71,10 +74,19 @@ object UiStatusResolver {
             return UiStatus.NEEDS_AUTHORIZATION
         }
 
-        // 4. Known backlog pending.
+        // 4. An automatic reconnect is already in progress. Keep this above
+        // backlog so the UI cannot offer a second reconnect action for stale
+        // backlog metadata while CONNECTING/BACKOFF is active.
+        if (runState.status == ConnectionStatus.CONNECTING ||
+            runState.status == ConnectionStatus.BACKOFF
+        ) {
+            return UiStatus.RECONNECTING
+        }
+
+        // 5. Known backlog pending while no reconnect attempt is active.
         if (runState.backlogPending) return UiStatus.BACKLOG_PENDING
 
-        // 5/6. Reception state.
+        // 6/7. Reception state.
         return when (runState.status) {
             ConnectionStatus.CONNECTED -> UiStatus.RECEIVING
             ConnectionStatus.CONNECTING,

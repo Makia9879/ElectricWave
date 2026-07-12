@@ -8,7 +8,7 @@ import org.junit.Test
 /**
  * Pure-JVM tests for [UiStatusResolver] — the §10.3 status mapping table. Covers
  * all six UiStatus values and the resolution priority (paused > unavailable >
- * needs-authorization > backlog-pending > receiving > reconnecting).
+ * needs-authorization > active reconnect > backlog-pending > receiving).
  */
 class UiStatusResolverTest {
 
@@ -69,9 +69,15 @@ class UiStatusResolverTest {
     }
 
     @Test
-    fun `backlog pending takes priority over backoff`() {
+    fun `active backoff takes priority over stale backlog action`() {
         val rs = RunState(status = ConnectionStatus.BACKOFF, backlogPending = true)
-        assertEquals(UiStatus.BACKLOG_PENDING, UiStatusResolver.resolve(true, rs, ok))
+        assertEquals(UiStatus.RECONNECTING, UiStatusResolver.resolve(true, rs, ok))
+    }
+
+    @Test
+    fun `active connection attempt takes priority over stale backlog action`() {
+        val rs = RunState(status = ConnectionStatus.CONNECTING, backlogPending = true)
+        assertEquals(UiStatus.RECONNECTING, UiStatusResolver.resolve(true, rs, ok))
     }
 
     // ---- authorization priority ----
