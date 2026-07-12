@@ -8,6 +8,7 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -113,6 +114,7 @@ private fun AppNavigation(
 ) {
     var route by rememberSaveable { mutableStateOf("config") }
     var detailId by rememberSaveable { mutableStateOf<String?>(null) }
+    val notificationListState = rememberLazyListState()
 
     // Deep-link: a notification tap opens that notification's detail.
     LaunchedEffect(pendingDetailId) {
@@ -143,6 +145,7 @@ private fun AppNavigation(
     when (route) {
         "list" -> NotificationListScreen(
             viewModel = viewModel,
+            listState = notificationListState,
             onBack = { route = "config" },
             onOpen = { id ->
                 detailId = id

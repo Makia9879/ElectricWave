@@ -42,6 +42,7 @@ class NoticeViewModel(app: Application) : AndroidViewModel(app) {
     val notifications: StateFlow<List<ReceivedNotification>> = inbox.notifications
 
     fun markNotificationRead(id: String) = inbox.markRead(id)
+    fun markAllNotificationsRead() = inbox.markAllRead()
     fun clearInbox() = inbox.clear()
 
     private val _testResult = MutableStateFlow<String?>(null)

@@ -10,10 +10,12 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.DeleteSweep
+import androidx.compose.material.icons.filled.DoneAll
 import androidx.compose.material3.Badge
 import androidx.compose.material3.Card
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -39,6 +41,7 @@ import java.util.Locale
 @Composable
 fun NotificationListScreen(
     viewModel: NoticeViewModel,
+    listState: LazyListState,
     onBack: () -> Unit,
     onOpen: (String) -> Unit,
 ) {
@@ -54,6 +57,11 @@ fun NotificationListScreen(
                     }
                 },
                 actions = {
+                    if (notifications.any { !it.read }) {
+                        IconButton(onClick = { viewModel.markAllNotificationsRead() }) {
+                            Icon(Icons.Filled.DoneAll, contentDescription = "全部标为已读")
+                        }
+                    }
                     if (notifications.isNotEmpty()) {
                         IconButton(onClick = { viewModel.clearInbox() }) {
                             Icon(Icons.Filled.DeleteSweep, contentDescription = "清空")
@@ -72,6 +80,7 @@ fun NotificationListScreen(
             }
         } else {
             LazyColumn(
+                state = listState,
                 modifier = Modifier.fillMaxSize().padding(padding),
                 contentPadding = PaddingValues(12.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
