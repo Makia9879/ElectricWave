@@ -24,3 +24,5 @@ deploy/electricwave/data/
 
 # Remote TLS state
 deploy/nginx/certbot/
+
+SENDER_INTEGRATION.md
