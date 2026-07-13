@@ -102,7 +102,7 @@ docker run --rm -p 127.0.0.1:8788:8788 \
 
 - 通知服务容器监听 `:8788`，Docker 仅映射 `127.0.0.1:8788:8788`。
 - Nginx 反代 webhook / SSE / test / healthz；SSE 必须 `proxy_buffering off`、`proxy_read_timeout` ≥ 75s。
-- `notice.makia98.com` Cloudflare 为 DNS only，TLS 由 VPS Nginx + Let's Encrypt 提供。
+- `notice.example.com` Cloudflare 为 DNS only，TLS 由 VPS Nginx + Let's Encrypt 提供。
 
 ## 安全边界
 

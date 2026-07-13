@@ -1,6 +1,6 @@
 # 二期可靠连接与重连 — 手工验收用例
 
-> Status: active · 适用构建：含 per-job 取消修复的 debug 构建（`versionName 0.1.0`，`lastUpdateTime ≥ 2026-07-11 11:38`）。
+> Status: active · 适用构建：含 per-job 取消修复的 debug 构建；具体构建时间不写入文档。
 > 用途：在真机（HyperOS 3.0 / Android 16）上由人工逐项执行，记录实际结果与系统前置条件。
 > 规格/契约依据：`0006-reliable-reconnect-spec.md`、`0007-integration-contract.md`、`AGENT_HANDOFF.md` §验收矩阵。
 
@@ -15,23 +15,23 @@
 
 ## 1. 命令速查（复制即用）
 
-> 所有服务端命令在 VPS 执行（`ssh -p5022 mk@cloud.makia98.com '...'`），token 只进 Authorization 头、**从不回显**，仅打印 HTTP 状态码/响应体/日志。远程 `/home/mk/docker-compose/notice` 与 `docker logs notice` 是尚未迁移的历史运维名，不是产品名。
+> 所有服务端命令在 VPS 执行（SSH 目标由 `$SSH_TARGET` 提供），token 只进 Authorization 头、**从不回显**，仅打印 HTTP 状态码/响应体/日志。部署目录由 `$DEPLOY_ROOT` 提供。
 
 - **P1 发探针通知**（返回 `201`=在线实时投递 / `202`=离线排队 / `429`=积压满 / `409`=幂等冲突 / `401,403`=鉴权失败 / `404`=接收端不存在）：
 
   ```sh
-  ssh -p5022 mk@cloud.makia98.com 'set -a; . /home/mk/docker-compose/notice/.env; set +a; \
-  echo "HTTP $(curl -s -o /tmp/p.body -w "%{http_code}" -X POST http://127.0.0.1:8788/api/v1/notifications \
+  ssh "$SSH_TARGET" 'set -a; . "$DEPLOY_ROOT/notice/.env"; set +a; \
+  echo "HTTP $(curl -s -o $TMPDIR/electricwave-response.body -w "%{http_code}" -X POST http://127.0.0.1:8788/api/v1/notifications \
     -H "Authorization: Bearer $BOOTSTRAP_WEBHOOK_ACCESS_TOKEN" -H "Content-Type: application/json" \
     -d "{\"receiver_id\":\"$BOOTSTRAP_RECEIVER_ID\",\"title\":\"测试\",\"body\":\"手验\",\"priority\":\"normal\"}")"; \
-  echo "body: $(cat /tmp/p.body)"; rm -f /tmp/p.body'
+  echo "body: $(cat $TMPDIR/electricwave-response.body)"; rm -f $TMPDIR/electricwave-response.body'
   ```
   > 发**离线积压**时把 `priority` 改 `urgent`、`title` 各不相同（如 `离线1/离线2/离线3`），便于核对顺序与去重。
 
 - **S1 看服务端 SSE 连接**（每次连接关闭才打一行 `dur=`；持有中的长连不出现 = 稳定在线）：
 
   ```sh
-  ssh -p5022 mk@cloud.makia98.com 'docker logs notice --since 3m 2>&1 | grep GET | grep /stream | \
+  ssh "$SSH_TARGET" 'docker logs "$APP_CONTAINER" --since 3m 2>&1 | grep GET | grep /stream | \
   sed -E "s/.*\"time\":\"([^\"]+)\".*duration_ms\":([0-9]+).*/\1  dur=\2ms/" | sort'
   ```
   > 出现连续多条 `dur` 为 0–1200ms 的行 = 重连抖动/风暴；只有 0–1 条短连随后安静 = 收敛稳定。
@@ -39,15 +39,15 @@
 - **S2 看 webhook 投递结果**（`status` 200=在线已投/202=排队/429=满）：
 
   ```sh
-  ssh -p5022 mk@cloud.makia98.com 'docker logs notice --since 3m 2>&1 | grep POST | grep notifications | \
+  ssh "$SSH_TARGET" 'docker logs "$APP_CONTAINER" --since 3m 2>&1 | grep POST | grep notifications | \
   sed -E "s/.*\"time\":\"([^\"]+).*\"status\":([0-9]+).*/\1 HTTP \2/" | sort'
   ```
 
-- **D1 打开诊断页**（免手动翻菜单）：`adb shell am start -n com.makia98.electricwave/.MainActivity --es nav diagnostics`
-- **D2 看前台服务是否存活**：`adb shell dumpsys activity services com.makia98.electricwave | grep -i isForeground`（有输出=存活）
-- **D3 看 App 进程**：`adb shell pidof com.makia98.electricwave`（空=已被杀）
-- **D4 杀进程（非强停，模拟系统回收）**：`adb shell am kill com.makia98.electricwave`
-- **D5 强行停止**：`adb shell am force-stop com.makia98.electricwave`（或 设置→应用→强行停止）
+- **D1 打开诊断页**（免手动翻菜单）：`adb shell am start -n com.example.electricwave/.MainActivity --es nav diagnostics`
+- **D2 看前台服务是否存活**：`adb shell dumpsys activity services com.example.electricwave | grep -i isForeground`（有输出=存活）
+- **D3 看 App 进程**：`adb shell pidof com.example.electricwave`（空=已被杀）
+- **D4 杀进程（非强停，模拟系统回收）**：`adb shell am kill com.example.electricwave`
+- **D5 强行停止**：`adb shell am force-stop com.example.electricwave`（或 设置→应用→强行停止）
 - **D6 切网络（需 root 或开发者权限；多数真机用系统设置/控制中心操作）**：
   `adb shell svc wifi disable` / `adb shell svc wifi enable`（失败则改用控制中心）
 

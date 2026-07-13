@@ -4,7 +4,7 @@
 
 ```text
 外部 webhook
-  -> https://notice.makia98.com
+  -> https://notice.example.com
   -> VPS Nginx
   -> 通知服务（127.0.0.1:8788）
   -> HTTP SSE
@@ -14,7 +14,7 @@
 
 ## 当前进度
 
-截至 2026-07-10，服务端与 Android 客户端均已实现并部署上线：公网 webhook → VPS Nginx → 通知服务（认证 SSE）→ Android 前台服务 → 原生系统通知的端到端链路已在真机（HyperOS 3.0 / Android 16）验证通过。
+服务端与 Android 客户端均已实现并部署上线：公网 webhook → VPS Nginx → 通知服务（认证 SSE）→ Android 前台服务 → 原生系统通知的端到端链路已在测试设备上验证通过。
 
 | 范围 | 状态 | 说明 |
 | --- | --- | --- |
@@ -22,13 +22,13 @@
 | HyperOS/Android 能力调研 | 已完成 | MVP 基线是标准 Android 通知；超级岛与焦点通知不在个人 MVP 范围。 |
 | Bark Server 复用评估 | 已完成 | 仅可参考 HTTP/存储/部署骨架，不能直接满足 Android SSE 下行模型。 |
 | 本机 Android 环境 | 已完成 | Android SDK 35、JDK 17、Android Studio 和无线 ADB 真机均可用。 |
-| 域名、Nginx、TLS | 已完成 | `notice.makia98.com` 已启用 Let's Encrypt；HTTP 跳转 HTTPS，自动续期已验证。 |
+| 域名、Nginx、TLS | 已完成 | `notice.example.com` 已启用 Let's Encrypt；HTTP 跳转 HTTPS，自动续期已验证。 |
 | Go 通知服务 | 已完成 | webhook、receiver 白名单/鉴权（hash+常量时间）、SSE（30s 心跳/新连接替换旧连接）、幂等(24h)、TTL、限流、审计、日志脱敏；纯 Go 持久化（modernc SQLite，无 CGO）。 |
 | Android App | 已完成 | profile + Android Keystore 加密存储、default/urgent/foreground 通知渠道、前台 SSE 服务（指数退避/永久错误诊断）、normal→default/high→urgent 渠道映射、收件箱（列表页+详情页）。 |
 | 端到端部署与真机验收 | 已完成 | `linux/amd64` 镜像部署至 VPS（仅回环发布 `127.0.0.1:8788`），Nginx 反代 SSE（`proxy_buffering off`），公网真机端到端验证通过。 |
 | 可靠连接与重连体验 | 已实现并部署 | 服务端 backlog/补发/ack、SSE `id:`+`info`/`backlog_gap` 控制事件、webhook 离线 `202 queued`/`429 backlog_full`、Android ack/cursor 去重、退避+生命周期/网络重连、6 态 UI 与诊断页均已落地；服务端已部署上线，真机新 App 已连上线上服务端。 |
 
-通知服务已部署：`https://notice.makia98.com/healthz` 返回 `200`；根路径返回 `404`（仅暴露既定 API，不泄露默认站点）。
+通知服务已部署：`https://notice.example.com/healthz` 返回 `200`；根路径返回 `404`（仅暴露既定 API，不泄露默认站点）。
 
 ## 已确定的 MVP 边界
 
@@ -43,11 +43,11 @@
 ## 已准备环境
 
 - App 名称：`ElectricWave`
-- Android 包名：`com.makia98.electricwave`
-- 公网地址：`https://notice.makia98.com`
-- VPS：`ssh mk@cloud.makia98.com -p5022`
+- Android 包名：`com.example.electricwave`
+- 公网地址：`https://notice.example.com`
+- VPS：`ssh <SSH_TARGET> -p <SSH_PORT>`
 - VPS 架构：`linux/amd64`，已有 host-network Nginx 容器
-- 首个真机：Android 16 / HyperOS 3.0，已通过无线 ADB 连接
+- 测试设备：已通过无线 ADB 连接；具体型号和系统版本不写入文档
 - Android 构建环境：执行 `source scripts/android-env.sh`，固定使用 JDK 17
 
 真实 token、`.env`、证书、私钥和 Android 签名文件不得提交、打印到日志或放入 URL。
