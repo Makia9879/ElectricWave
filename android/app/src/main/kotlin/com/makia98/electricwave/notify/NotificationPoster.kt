@@ -11,6 +11,7 @@ import com.google.gson.Gson
 import com.makia98.electricwave.MainActivity
 import com.makia98.electricwave.R
 import com.makia98.electricwave.sse.NotificationEvent
+import com.makia98.electricwave.svg.NotificationBodyParser
 import com.makia98.electricwave.util.Logx
 
 /**
@@ -56,7 +57,8 @@ object NotificationPoster {
         }
 
         val title = event.title.take(MAX_TITLE)
-        val body = event.body.take(MAX_BODY)
+        // Shade and heads-up cannot render SVG; keep markup out of the ticker.
+        val body = NotificationBodyParser.preview(event.body).take(MAX_BODY)
 
         val dataJson = if (event.data != null) Gson().toJson(event.data) else null
         val tapIntent = Intent(context, MainActivity::class.java).apply {

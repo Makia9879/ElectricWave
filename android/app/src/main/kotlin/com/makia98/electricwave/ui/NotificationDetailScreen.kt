@@ -78,7 +78,7 @@ fun NotificationDetailScreen(
                 DetailRow("通知 ID", item.notificationId)
                 HorizontalDivider()
                 Text("正文", style = MaterialTheme.typography.titleMedium)
-                Text(item.body.ifBlank { "(无正文)" }, style = MaterialTheme.typography.bodyLarge)
+                NotificationBody(item.body)
                 if (!item.dataJson.isNullOrBlank()) {
                     Spacer(Modifier.height(8.dp))
                     Text("data 载荷", style = MaterialTheme.typography.titleMedium)

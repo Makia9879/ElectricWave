@@ -45,6 +45,29 @@ class NoticeViewModel(app: Application) : AndroidViewModel(app) {
     fun markAllNotificationsRead() = inbox.markAllRead()
     fun clearInbox() = inbox.clear()
 
+    /**
+     * DEBUG-only inbox seed (adb `am start --es nav svg` or `--es debug_body_b64`).
+     * Does not log the body. Only called from [com.makia98.electricwave.MainActivity]
+     * when [com.makia98.electricwave.BuildConfig.DEBUG] is true.
+     */
+    fun debugInsertNotification(title: String, body: String): String {
+        val id = "dbg_" + System.currentTimeMillis()
+        inbox.add(
+            ReceivedNotification(
+                notificationId = id,
+                title = title.ifBlank { "SVG 调试" },
+                body = body,
+                priority = "normal",
+                groupKey = null,
+                dataJson = null,
+                expiresAt = null,
+                receivedAt = System.currentTimeMillis(),
+                read = false,
+            )
+        )
+        return id
+    }
+
     private val _testResult = MutableStateFlow<String?>(null)
     val testResult: StateFlow<String?> = _testResult.asStateFlow()
 

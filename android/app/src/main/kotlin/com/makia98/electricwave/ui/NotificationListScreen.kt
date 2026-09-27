@@ -38,6 +38,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.makia98.electricwave.data.ReceivedNotification
+import com.makia98.electricwave.svg.NotificationBodyParser
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -136,7 +137,7 @@ private fun NotificationRow(item: ReceivedNotification, onClick: () -> Unit) {
                 if (!item.read) Badge()
             }
             Text(
-                text = item.body,
+                text = NotificationBodyParser.preview(item.body),
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 maxLines = 2,

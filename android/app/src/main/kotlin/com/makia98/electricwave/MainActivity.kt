@@ -75,9 +75,55 @@ class MainActivity : ComponentActivity() {
             viewModel.markNotificationRead(id)
         }
         if (BuildConfig.DEBUG) {
+            seedDebugSvg(intent)
             intent?.getStringExtra("nav")?.let { pendingNav = it }
         }
     }
+
+    /**
+     * DEBUG-only: drop an SVG notification into the encrypted inbox and open it.
+     * `am start --es nav svg`, or `--es debug_body_b64 <url-safe-base64>`.
+     */
+    private fun seedDebugSvg(intent: Intent?) {
+        intent ?: return
+        val custom = decodeDebugBody(intent.getStringExtra("debug_body_b64"))
+            ?: intent.getStringExtra("debug_body")
+        val nav = intent.getStringExtra("nav")
+        val body = when {
+            !custom.isNullOrBlank() -> custom
+            nav == "svg" -> debugSvgSample()
+            else -> return
+        }
+        pendingDetailId = viewModel.debugInsertNotification(
+            title = intent.getStringExtra("debug_title") ?: "SVG 调试",
+            body = body,
+        )
+        viewModel.markNotificationRead(pendingDetailId!!)
+    }
+
+    private fun decodeDebugBody(raw: String?): String? {
+        if (raw.isNullOrBlank()) return null
+        return try {
+            val flags = if (raw.contains('-') || raw.contains('_')) {
+                android.util.Base64.URL_SAFE or android.util.Base64.NO_WRAP
+            } else {
+                android.util.Base64.DEFAULT
+            }
+            String(android.util.Base64.decode(raw, flags), Charsets.UTF_8)
+        } catch (_: Throwable) {
+            null
+        }
+    }
+
+    private fun debugSvgSample(): String =
+        "这是一条带 SVG 图示的通知。\n" +
+            "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 240 88\">" +
+            "<rect width=\"240\" height=\"88\" rx=\"16\" fill=\"#145C45\"/>" +
+            "<circle cx=\"44\" cy=\"44\" r=\"20\" fill=\"#F4C430\"/>" +
+            "<rect x=\"78\" y=\"30\" width=\"132\" height=\"10\" rx=\"5\" fill=\"#FFFFFF\"/>" +
+            "<rect x=\"78\" y=\"50\" width=\"88\" height=\"8\" rx=\"4\" fill=\"#8FCBB4\"/>" +
+            "</svg>\n" +
+            "图示结束后仍显示正文。"
 
     // DEBUG-only: populate the profile from intent extras (adb `am start --es`).
     // Used for automated device tests because HyperOS blocks shell input

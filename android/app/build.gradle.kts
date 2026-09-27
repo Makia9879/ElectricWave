@@ -78,6 +78,10 @@ dependencies {
     // JSON parsing for SSE events.
     implementation("com.google.code.gson:gson:2.11.0")
 
+    // Renders inline SVG in notification detail. Does not execute scripts;
+    // external images/fonts/CSS are not resolved (no file resolver registered).
+    implementation("com.caverock:androidsvg-aar:1.4")
+
     // Coroutines.
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1")
 
