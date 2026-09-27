@@ -2,12 +2,16 @@ package com.makia98.electricwave.service
 
 import android.app.Notification
 import android.app.Service
+import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.content.pm.ServiceInfo
 import android.net.ConnectivityManager
 import android.net.Network
+import android.os.Build
 import android.os.IBinder
+import android.os.PowerManager
 import androidx.core.app.NotificationCompat
 import java.time.Instant
 import java.time.format.DateTimeParseException
@@ -44,9 +48,13 @@ import kotlinx.coroutines.launch
  * Foreground service that owns the SSE lifecycle (contract §10.2 / spec 0005).
  *
  * Responsibilities:
- *  - Started explicitly by the user (UI "enable receiving" toggle). Runs with a
- *    low-importance, always-on notification on a dedicated channel.
- *  - foregroundServiceType = dataSync (required on API 34+).
+ *  - Started by the enable toggle, process start, boot/update, or the keepalive
+ *    alarm. Runs with an always-on notification on a dedicated channel.
+ *  - foregroundServiceType = dataSync. specialUse was frozen by HyperOS on
+ *    screen-off, which dropped the SSE connection until the user opened the app.
+ *    If the system times dataSync out, [onTimeout] arms the keepalive alarm.
+ *  - Does not hold a permanent wake lock. On this device that caused the
+ *    screen-off freezer to cut the connection. A short alarm rechecks instead.
  *  - Maintains a persistent ack cursor ([AckCursorStore]); every connect submits
  *    `Last-Event-ID` / `X-Receiver-Ack`. Notification events are de-duplicated
  *    by event_id, persisted to the encrypted inbox, acked, then posted.
@@ -65,7 +73,9 @@ import kotlinx.coroutines.launch
 class NoticeForegroundService : Service() {
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    @Volatile
     private var streamJob: Job? = null
+    private var screenReceiver: BroadcastReceiver? = null
     private val backoff = BackoffPolicy()
     /**
      * Serializes connection (re)start so that overlapping triggers (foreground /
@@ -103,12 +113,38 @@ class NoticeForegroundService : Service() {
         // Become foreground immediately to satisfy the 5s window.
         startForegroundNotification()
         registerLifecycleAndNetwork()
+        registerScreenWatch()
+    }
+
+    override fun onTaskRemoved(rootIntent: Intent?) {
+        val profile = runCatching { store.current() }.getOrNull()
+        if (profile != null && profile.enabled && profile.isConnectable) {
+            // HyperOS often kills the process when the task is swiped away.
+            // The alarm is the path that is allowed to start us again.
+            ReceiverScheduler.schedule(this, delayMs = 1_000L)
+        }
+        super.onTaskRemoved(rootIntent)
+    }
+
+    override fun onTimeout(startId: Int) {
+        handleSystemTimeout()
+    }
+
+    override fun onTimeout(startId: Int, fgsType: Int) {
+        handleSystemTimeout()
+    }
+
+    private fun handleSystemTimeout() {
+        Logx.w("System timed out the receiving service; scheduling restart")
+        ReceiverScheduler.schedule(this, delayMs = 3_000L)
+        stopSelf()
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         when (intent?.action) {
             ACTION_STOP -> {
                 Logx.i("Stop requested")
+                ReceiverScheduler.cancel(this)
                 stopStream()
                 store.updateRunState {
                     it.copy(
@@ -128,6 +164,26 @@ class NoticeForegroundService : Service() {
                     return START_NOT_STICKY
                 }
                 triggerReconnect("manual")
+                ReceiverScheduler.schedule(this)
+            }
+            ACTION_WATCHDOG -> runWatchdog()
+            ACTION_ENSURE -> {
+                val profile = store.current()
+                if (!profile.enabled || !profile.isConnectable) {
+                    Logx.w("Ensure skipped: profile not connectable")
+                    ReceiverScheduler.cancel(this)
+                    stopSelf()
+                    return START_NOT_STICKY
+                }
+                synchronized(startLock) {
+                    val job = streamJob
+                    if (job != null && job.isActive) {
+                        Logx.i("Ensure: stream already active")
+                    } else {
+                        startStream(profile)
+                    }
+                }
+                ReceiverScheduler.schedule(this)
             }
             ACTION_START, null -> {
                 val profile = store.current()
@@ -144,6 +200,7 @@ class NoticeForegroundService : Service() {
                     return START_NOT_STICKY
                 }
                 startStream(profile)
+                ReceiverScheduler.schedule(this)
             }
         }
         // Preserve the user's enabled receiving state across ordinary process
@@ -358,6 +415,7 @@ class NoticeForegroundService : Service() {
             )
         }
         Logx.w("Permanent stream error -> $label; stopping retry")
+        ReceiverScheduler.cancel(this)
         stopSelfStream()
     }
 
@@ -458,10 +516,68 @@ class NoticeForegroundService : Service() {
 
     override fun onDestroy() {
         stopStream()
+        unregisterScreenWatch()
         unregisterLifecycleAndNetwork()
         scope.cancel()
         Logx.i("Foreground service destroyed")
         super.onDestroy()
+    }
+
+    private fun registerScreenWatch() {
+        val receiver = object : BroadcastReceiver() {
+            override fun onReceive(context: Context, intent: Intent?) {
+                when (intent?.action) {
+                    Intent.ACTION_SCREEN_OFF -> {
+                        Logx.i("Screen off: arm short watchdog")
+                        ReceiverScheduler.schedule(this@NoticeForegroundService, ReceiverScheduler.SCREEN_OFF_INTERVAL_MS)
+                    }
+                    Intent.ACTION_SCREEN_ON, Intent.ACTION_USER_PRESENT -> runWatchdog()
+                }
+            }
+        }
+        screenReceiver = receiver
+        val filter = IntentFilter().apply {
+            addAction(Intent.ACTION_SCREEN_OFF)
+            addAction(Intent.ACTION_SCREEN_ON)
+            addAction(Intent.ACTION_USER_PRESENT)
+        }
+        if (Build.VERSION.SDK_INT >= 33) {
+            registerReceiver(receiver, filter, RECEIVER_NOT_EXPORTED)
+        } else {
+            registerReceiver(receiver, filter)
+        }
+    }
+
+    private fun unregisterScreenWatch() {
+        screenReceiver?.let { runCatching { unregisterReceiver(it) } }
+        screenReceiver = null
+    }
+
+    /**
+     * Restart SSE if the socket is gone or the heartbeat is stale. A frozen
+     * read still looks "active", which is why opening the app used to be the
+     * only thing that drained the backlog.
+     */
+    private fun runWatchdog() {
+        val profile = store.current()
+        if (!profile.enabled || !profile.isConnectable) {
+            ReceiverScheduler.cancel(this)
+            stopSelf()
+            return
+        }
+        val active = streamJob?.isActive == true
+        val fresh = isHeartbeatFresh(store.currentRunState())
+        if (!active || !fresh) {
+            Logx.i("Watchdog reconnect (active=$active fresh=$fresh)")
+            startStream(profile)
+        } else {
+            Logx.i("Watchdog: connection healthy")
+        }
+        val screenOn = getSystemService(PowerManager::class.java)?.isInteractive == true
+        ReceiverScheduler.schedule(
+            this,
+            if (screenOn) ReceiverScheduler.INTERVAL_MS else ReceiverScheduler.SCREEN_OFF_INTERVAL_MS,
+        )
     }
 
     private fun startForegroundNotification() {
@@ -471,12 +587,13 @@ class NoticeForegroundService : Service() {
             .setContentText(getString(R.string.foreground_notif_text))
             .setOngoing(true)
             .setPriority(NotificationCompat.PRIORITY_LOW)
+            .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
             .build()
         ServiceCompat.startForeground(
             this,
             FOREGROUND_NOTIF_ID,
             notif,
-            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
                 ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC
             } else {
                 0
@@ -488,6 +605,8 @@ class NoticeForegroundService : Service() {
         const val ACTION_START = "com.makia98.electricwave.action.START"
         const val ACTION_STOP = "com.makia98.electricwave.action.STOP"
         const val ACTION_RECONNECT = "com.makia98.electricwave.action.RECONNECT"
+        const val ACTION_ENSURE = "com.makia98.electricwave.action.ENSURE"
+        const val ACTION_WATCHDOG = "com.makia98.electricwave.action.WATCHDOG"
         private const val FOREGROUND_NOTIF_ID = 1001
         private const val HEARTBEAT_FRESH_MS = 75_000L
 
@@ -516,6 +635,28 @@ class NoticeForegroundService : Service() {
                 ContextCompat.startForegroundService(context, intent)
             } catch (t: Throwable) {
                 Logx.w("reconnect service intent failed", t)
+            }
+        }
+
+        /** Reconnect if the socket is dead or the heartbeat is stale. */
+        fun watchdog(context: Context) {
+            val intent = Intent(context, NoticeForegroundService::class.java)
+                .setAction(ACTION_WATCHDOG)
+            try {
+                ContextCompat.startForegroundService(context, intent)
+            } catch (t: Throwable) {
+                Logx.w("watchdog service intent failed", t)
+            }
+        }
+
+        /** Start receiving if it is not already running. Does not drop a healthy SSE. */
+        fun ensure(context: Context) {
+            val intent = Intent(context, NoticeForegroundService::class.java)
+                .setAction(ACTION_ENSURE)
+            try {
+                ContextCompat.startForegroundService(context, intent)
+            } catch (t: Throwable) {
+                Logx.w("ensure service intent failed", t)
             }
         }
     }

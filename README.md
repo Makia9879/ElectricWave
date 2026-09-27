@@ -81,6 +81,7 @@
 - [开发前置条件](docs/development-prerequisites.md)
 - [Bark Server 适配评估](docs/research/bark-server-fit.md)
 - [Android 通知与后台运行调研](docs/research/android-delivery-model.md)
+- [HyperOS 锁屏后 SSE 中断](docs/research/hyperos-screen-off-sse.md)
 - [HyperOS 能力调研](docs/research/hyperos-dynamic-island-capability.md)
 
 ## 实施约束

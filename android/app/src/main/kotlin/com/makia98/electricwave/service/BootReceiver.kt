@@ -13,16 +13,27 @@ import com.makia98.electricwave.util.Logx
  */
 class BootReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
-        if (intent.action != Intent.ACTION_BOOT_COMPLETED) return
+        if (intent.action !in BOOT_ACTIONS) return
         try {
             val app = context.applicationContext as? NoticeApplication ?: return
             val profile = app.profileStore.current()
             if (profile.enabled && profile.isConnectable) {
-                NoticeForegroundService.start(context)
-                Logx.i("Boot completed: attempted to start receiving service")
+                NoticeForegroundService.ensure(context)
+                ReceiverScheduler.schedule(context, delayMs = 5_000L)
+                Logx.i("Auto-start (${intent.action}): attempted to start receiving service")
             }
         } catch (t: Throwable) {
             Logx.w("Boot auto-start failed (best-effort)", t)
         }
+    }
+
+    private companion object {
+        val BOOT_ACTIONS = setOf(
+            Intent.ACTION_BOOT_COMPLETED,
+            Intent.ACTION_LOCKED_BOOT_COMPLETED,
+            Intent.ACTION_MY_PACKAGE_REPLACED,
+            "android.intent.action.QUICKBOOT_POWERON",
+            "com.htc.intent.action.QUICKBOOT_POWERON",
+        )
     }
 }

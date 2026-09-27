@@ -41,9 +41,12 @@ object NoticeChannels {
             // and user settings remain authoritative.
         }
 
-        // Low-importance, non-dismissible-by-user-priority channel for the
-        // always-on foreground service. Keeping it separate prevents users from
-        // silencing business notifications by muting the service channel.
+        // Keep this channel quiet. A noisy/default channel made HyperOS treat the
+        // receiver as a normal app and drop the SSE connection on screen-off.
+        val existing = nm.getNotificationChannel(FOREGROUND)
+        if (existing != null && existing.importance != NotificationManager.IMPORTANCE_LOW) {
+            nm.deleteNotificationChannel(FOREGROUND)
+        }
         val foregroundCh = NotificationChannel(
             FOREGROUND,
             context.getString(R.string.channel_foreground_name),

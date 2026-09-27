@@ -20,6 +20,7 @@ import androidx.compose.ui.Modifier
 import android.provider.Settings
 import android.provider.Settings.EXTRA_APP_PACKAGE
 import com.makia98.electricwave.notify.NotificationPoster
+import com.makia98.electricwave.service.SelfStartSupport
 import com.makia98.electricwave.ui.DiagnosticsScreen
 import com.makia98.electricwave.ui.NoticeViewModel
 import com.makia98.electricwave.ui.NotificationDetailScreen
@@ -58,6 +59,11 @@ class MainActivity : ComponentActivity() {
                 }
             }
         }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        SelfStartSupport.promptIfNeeded(this)
     }
 
     override fun onNewIntent(intent: Intent) {

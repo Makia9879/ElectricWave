@@ -5,6 +5,9 @@ import com.makia98.electricwave.data.AckCursorStore
 import com.makia98.electricwave.data.InboxStore
 import com.makia98.electricwave.data.ProfileStore
 import com.makia98.electricwave.notify.NoticeChannels
+import com.makia98.electricwave.service.NoticeForegroundService
+import com.makia98.electricwave.service.ReceiverScheduler
+import com.makia98.electricwave.util.Logx
 import okhttp3.OkHttpClient
 import java.util.concurrent.TimeUnit
 
@@ -35,5 +38,19 @@ class NoticeApplication : Application() {
         profileStore = ProfileStore(this)
         inboxStore = InboxStore(this)
         ackCursorStore = AckCursorStore(this)
+        resumeReceivingIfEnabled()
+    }
+
+    /**
+     * Any process start (launcher, boot receiver, keepalive alarm, sticky
+     * restart) resumes receiving. Opening the UI is not required. A background
+     * start restriction is logged and left to the alarm / boot exemption.
+     */
+    private fun resumeReceivingIfEnabled() {
+        val profile = profileStore.current()
+        if (!profile.enabled || !profile.isConnectable) return
+        runCatching { NoticeForegroundService.ensure(this) }
+            .onFailure { Logx.w("Auto-resume receiving service failed", it) }
+        ReceiverScheduler.schedule(this)
     }
 }

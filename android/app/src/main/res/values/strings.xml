@@ -11,5 +11,5 @@
 
     <!-- Foreground service notification -->
     <string name="foreground_notif_title">ElectricWave正在接收通知</string>
-    <string name="foreground_notif_text">保持连接以接收推送</string>
+    <string name="foreground_notif_text">后台保持接收中，请勿划掉此通知</string>
 </resources>
